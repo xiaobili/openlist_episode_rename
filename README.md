@@ -1,172 +1,123 @@
-# OpenList 批量剧集重命名工具
+# OpenList 交互式剧集重命名工具
 
-这个工具可以帮助您使用 OpenList API 批量重命名剧集文件。
+一个基于 Python 的交互式工具，用于连接 OpenList 服务并批量重命名剧集文件。该工具提供了直观的命令行界面，支持多种重命名模式，让剧集整理变得简单高效。
 
-## 功能
+## 🚀 功能特性
 
-- 批量重命名视频文件
-- 智能识别剧集信息（如季数、集数、标题）
-- 支持自定义命名模式
-- 试运行模式（预览重命名结果，不实际执行）
-- 支持多种视频格式
-- 交互式目录导航
-- 多种重命名模式（智能、手动、正则替换）
+### 核心功能
+- **目录浏览** - 交互式导航 OpenList 文件系统
+- **批量重命名** - 支持多种重命名模式的批量操作
+- **剧集信息识别** - 自动从文件名中提取剧集信息
+- **多模式重命名** - 智能识别、手动输入、统一样式等多种方式
 
-## 依赖
+### 重命名模式
+- **智能重命名** - 自动识别文件名中的剧集信息并标准化
+- **手动重命名** - 逐个为文件指定新名称
+- **统一样式** - 为所有文件使用相同模式，自动递增集数
+- **正则替换** - 使用正则表达式进行高级重命名
 
-- Python 3.6+
-- requests 库
+### 用户体验
+- **Rich 界面** - 提供美观的终端界面（rich 版本）
+- **进度指示** - 操作过程中的可视化进度条
+- **确认机制** - 重命名前预览和确认
+- **错误处理** - 完善的异常处理和错误提示
 
-安装依赖：
+## 📋 系统要求
+
+- Python 3.7+
+- 网络连接到 OpenList 服务
+
+## 🔧 依赖包
+
 ```bash
-pip install requests
+pip install requests rich
 ```
 
-## 使用方法
 
-### 1. 基础批量重命名
+## 🛠️ 安装使用
 
-使用 `bulk_rename_episodes.py` 脚本：
+### 1. 克隆或下载项目
+```bash
+# 下载项目文件
+```
 
-### 2. 交互式批量重命名
 
-使用 `interactive_episode_renamer.py` 脚本：
+### 2. 安装依赖
+```bash
+pip install requests rich
+```
 
-1. 运行脚本：
-   ```bash
-   python interactive_episode_renamer.py
-   ```
 
-2. 按提示输入服务器地址、用户名和密码
+### 3. 运行程序
+```bash
+# Rich 美化版（推荐）
+python interactive_episode_renamer_with_rich.py
 
-3. 登录后，您可以：
-   - 浏览和导航目录
-   - 查看目录中的文件
-   - 选择不同的重命名模式：
-     * 智能重命名：自动识别剧集信息并应用命名模式
-     * 手动重命名：为每个文件单独指定新名称
-     * 统一命名：为所有文件使用相同模式，递增集数
+# 基础版本
+python interactive_episode_renamer.py
+```
 
-### 3. 高级批量重命名
 
-使用 `advanced_episode_renamer.py` 脚本：
+## ⚙️ 配置参数
 
-1. 修改脚本中的配置信息：
-   ```python
-   BASE_URL = "https://fox.oplist.org.cn"  # OpenList 服务地址
-   USERNAME = "your_username"               # 您的用户名
-   PASSWORD = "your_password"               # 您的密码
-   DIRECTORY_PATH = "/path/to/episodes"     # 要重命名的目录路径
-   ```
+### 连接设置
+- **服务地址**: OpenList 服务的 URL（如 `http://192.168.1.1:5244`）
+- **用户名**: OpenList 账户用户名
+- **密码**: OpenList 账户密码
 
-2. 定义重命名映射：
-   ```python
-   episode_mapping = {
-       "old_name1.mkv": "new_name1.mkv",
-       "old_name2.mkv": "new_name2.mkv",
-       # 添加更多映射...
-   }
-   ```
+### 支持的视频格式
+`.mp4`, `.mkv`, `.avi`, `.mov`, `.wmv`, `.flv`, `.webm`, `.m4v`, `.mpg`, `.mpeg`, `.ts`, `.m2ts`, `.vob`, `.iso`
 
-3. 运行脚本：
-   ```bash
-   python bulk_rename_episodes.py
-   ```
+## 📖 使用指南
 
-### 2. 高级智能重命名
+### 1. 登录验证
+- 启动程序后输入 OpenList 服务地址
+- 输入用户名和密码进行身份验证
 
-使用 `advanced_episode_renamer.py` 脚本：
+### 2. 目录导航
+- 选择数字进入子目录
+- 0 键返回上级目录
+- 查看当前目录的文件和子目录
 
-1. 修改配置信息（同上）
+### 3. 重命名操作
+- 选择视频文件进行批量重命名
+- 选择重命名模式：
+  - **智能重命名**: 自动解析剧集信息
+  - **手动重命名**: 逐一指定新名称
+  - **统一样式**: 统一格式，递增集数
 
-2. 选择重命名方式：
-   - 智能重命名：自动识别剧集信息并应用命名模式
-   - 自定义重命名：使用您提供的映射
+### 4. 命名模式示例
+- `{title}.S{season}E{episode:02d}` → `权力的游戏.S01E01.mp4`
+- `Season_{season}_Episode_{episode:02d}_{title}` → `Season_01_Episode_01_权力的游戏.mp4`
 
-3. 运行脚本：
-   ```bash
-   python advanced_episode_renamer.py
-   ```
+## 🔍 技术架构
 
-## API 说明
+### 主要组件
+- **[InteractiveEpisodeRenamer](file:///Volumes/DATA/Code/Pycharm/Episode_Rename/interactive_episode_renamer_with_rich.py#L21-L587)** - 核心重命名类
+- **API 集成** - 与 OpenList API 通信
+- **文件系统操作** - 目录浏览和文件重命名
 
-### 认证
-- 端点：`/api/auth/login`
-- 方法：POST
-- 请求体：`{"username": "your_username", "password": "your_password"}`
-- 响应：JWT 令牌
+### API 接口
+- `/api/auth/login` - 用户认证
+- `/api/fs/list` - 获取目录内容
+- `/api/fs/batch_rename` - 批量重命名
 
-### 批量重命名
-- 端点：`/api/fs/batch_rename`
-- 方法：POST
-- 请求头：`Authorization: Bearer {jwt_token}`
-- 请求体：
-  ```json
-  {
-    "src_dir": "/path/to/directory",
-    "rename_objects": [
-      {
-        "src_name": "old_filename.ext",
-        "new_name": "new_filename.ext"
-      }
-    ]
-  }
-  ```
+## 🤝 贡献指南
 
-## 命名模式
+欢迎提交 Issue 和 Pull Request 来改进这个项目！
 
-支持以下命名模式变量：
-- `{season}`: 季数（2位数字）
-- `{episode}`: 集数（2位数字）
-- `{title}`: 剧集标题
+## 📄 许可证
 
-示例模式：
-- `"S{season}E{episode:02d}_{title}"` → `S01E01_剧集标题.mkv`
-- `"{title}_Season_{season}_Episode_{episode}"` → `剧集标题_Season_01_Episode_01.mkv`
+遵循 MIT 许可证。详情请参阅 LICENSE 文件。
 
-## 注意事项
+## 🆘 支持
 
-1. **试运行模式**：在实际执行重命名前，建议先使用试运行模式预览结果
-2. **备份**：在执行批量重命名前，请备份您的文件
-3. **权限**：确保您有目录的写入权限
-4. **文件名冲突**：确保目标文件名不会与现有文件冲突
-5. **网络连接**：确保可以访问 OpenList 服务
+如遇到问题，请检查：
+1. OpenList 服务是否正常运行
+2. 网络连接是否稳定
+3. 用户名和密码是否正确
+4. API 端点是否可用
 
-## 常见问题
+---
 
-### 登录失败
-- 检查用户名和密码是否正确
-- 确认 OpenList 服务是否可用
-
-### 重命名失败
-- 检查目标目录是否存在
-- 确保文件名不包含非法字符
-- 确认目标文件名没有冲突
-
-### 智能识别不准确
-- 可以使用自定义映射方式精确控制重命名
-- 文件名应包含季数、集数等信息以便识别
-
-## 支持的视频格式
-
-- MP4, MKV, AVI, MOV, WMV, FLV, WEBM, M4V, MPG, MPEG, TS, M2TS, VOB, ISO
-
-## 交互式脚本特性
-
-交互式脚本 (`interactive_episode_renamer.py`) 提供了完整的目录浏览和文件管理功能：
-
-- 交互式目录导航
-- 可视化显示目录结构
-- 多种重命名模式（智能、手动、统一命名）
-- 实时预览重命名结果
-- 安全确认机制避免误操作
-
-### 重命名模式说明
-
-1. 智能重命名：自动分析现有文件名，识别剧集信息并应用标准命名模式
-2. 手动重命名：逐个为文件指定新名称
-3. 统一命名：为所有文件使用相同的命名规则，自动递增集数
-
-## 贡献
-
-欢迎提交问题和功能请求！
+*享受整洁有序的剧集收藏！*
