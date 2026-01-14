@@ -105,7 +105,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest, macos-13]
+        os: [ubuntu-latest, windows-latest, macos-latest, macos-15-intel]
         python-version: [3.12]
         script: [interactive_episode_renamer, interactive_episode_renamer_with_rich]
 
