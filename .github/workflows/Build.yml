@@ -1,0 +1,104 @@
+name: Build Executables with PyInstaller
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: [3.8, 3.9, '3.10']
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller requests rich
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Create dist directory
+      run: mkdir -p dist
+
+    - name: Build interactive_episode_renamer with PyInstaller (Linux/Mac)
+      if: matrix.os != 'windows-latest'
+      run: |
+        pyinstaller --onefile --name EpisodeRenamer interactive_episode_renamer.py
+        mv dist/EpisodeRenamer dist/EpisodeRenamer-${{ matrix.os }}-${{ matrix.python-version }}
+
+    - name: Build interactive_episode_renamer with PyInstaller (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        pyinstaller --onefile --name EpisodeRenamer interactive_episode_renamer.py
+        move dist\EpisodeRenamer.exe dist\EpisodeRenamer-${{ matrix.os }}-${{ matrix.python-version }}.exe
+
+    - name: Build interactive_episode_renamer_with_rich with PyInstaller (Linux/Mac)
+      if: matrix.os != 'windows-latest'
+      run: |
+        pyinstaller --onefile --name EpisodeRenamerRich interactive_episode_renamer_with_rich.py
+        mv dist/EpisodeRenamerRich dist/EpisodeRenamerRich-${{ matrix.os }}-${{ matrix.python-version }}
+
+    - name: Build interactive_episode_renamer_with_rich with PyInstaller (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        pyinstaller --onefile --name EpisodeRenamerRich interactive_episode_renamer_with_rich.py
+        move dist\EpisodeRenamerRich.exe dist\EpisodeRenamerRich-${{ matrix.os }}-${{ matrix.python-version }}.exe
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: executables-${{ matrix.os }}-${{ matrix.python-version }}
+        path: dist/
+
+  create-release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: ./releases
+
+    - name: Display structure of downloaded files
+      run: ls -R ./releases
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: false
+        prerelease: false
+
+    - name: Upload Release Assets
+      run: |
+        for dir in releases/*; do
+          if [ -d "$dir" ]; then
+            for file in "$dir"/*; do
+              if [ -f "$file" ]; then
+                echo "Uploading $(basename "$file") to release"
+                gh release upload ${{ github.ref_name }} "$file"
+              fi
+            done
+          fi
+        done
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
