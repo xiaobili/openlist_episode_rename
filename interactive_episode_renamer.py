@@ -161,6 +161,46 @@ class InteractiveEpisodeRenamer:
             print(f"批量重命名请求失败: {e}")
             return False
 
+    def rename_single_item(self, path: str, new_name: str) -> bool:
+        """
+        重命名单个文件或文件夹
+        
+        :param path: 文件或文件夹的完整路径
+        :param new_name: 新名称
+        :return: 是否成功
+        """
+        if not self.token:
+            print("错误: 未登录，请先调用login方法")
+            return False
+            
+        rename_url = f"{self.base_url}/api/fs/rename"
+        
+        payload = {
+            "path": path,
+            "name": new_name
+        }
+        
+        headers = {
+            "Authorization": self.token,
+            "Content-Type": "application/json"
+        }
+        
+        try:
+            response = requests.post(rename_url, json=payload, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            result = response.json()
+            if result.get("code") == 200:
+                print(f"重命名成功: {os.path.basename(path)} -> {new_name}")
+                return True
+            else:
+                print(f"重命名失败: {result.get('message')}")
+                return False
+                
+        except requests.exceptions.RequestException as e:
+            print(f"重命名请求失败: {e}")
+            return False
+
     def display_directories(self, path: str = "/"):
         """
         显示指定路径下的所有目录
@@ -245,12 +285,14 @@ class InteractiveEpisodeRenamer:
                 
                 print(f"{len(directories) + 1}. 查看当前目录文件")
                 print(f"{len(directories) + 2}. 在当前目录进行批量重命名")
-                print(f"{len(directories) + 3}. 退出")
+                print(f"{len(directories) + 3}. 重命名单个文件或文件夹")
+                print(f"{len(directories) + 4}. 退出")
             else:
                 # 即使没有子目录，也要显示文件查看和重命名选项
                 print("1. 查看当前目录文件")
                 print("2. 在当前目录进行批量重命名")
-                print("3. 退出")
+                print("3. 重命名单个文件或文件夹")
+                print("4. 退出")
             
             try:
                 choice = input("\n请输入选项编号: ").strip()
@@ -276,7 +318,9 @@ class InteractiveEpisodeRenamer:
                         self.display_files(self.current_path)
                     elif choice_num == len(directories) + 2:  # 批量重命名
                         self.interactive_batch_rename()
-                    elif choice_num == len(directories) + 3:  # 退出
+                    elif choice_num == len(directories) + 3:  # 重命名单个项目
+                        self.interactive_rename_single_item()
+                    elif choice_num == len(directories) + 4:  # 退出
                         print("退出程序")
                         break
                     else:
@@ -287,7 +331,9 @@ class InteractiveEpisodeRenamer:
                         self.display_files(self.current_path)
                     elif choice_num == 2:  # 批量重命名
                         self.interactive_batch_rename()
-                    elif choice_num == 3:  # 退出
+                    elif choice_num == 3:  # 重命名单个项目
+                        self.interactive_rename_single_item()
+                    elif choice_num == 4:  # 退出
                         print("退出程序")
                         break
                     else:
@@ -613,6 +659,114 @@ class InteractiveEpisodeRenamer:
             print(f"正则表达式错误: {e}")
         except KeyboardInterrupt:
             print("\n\n操作被用户中断")
+
+    def interactive_rename_single_item(self):
+        """
+        交互式重命名单个文件或文件夹
+        """
+        print(f"\n重命名单个文件或文件夹 - 当前路径: {self.current_path}")
+        
+        # 获取当前目录的所有内容
+        contents = self.get_directory_contents(self.current_path)
+        if not contents:
+            print("当前目录为空或无法获取内容")
+            return
+        
+        # 分别列出文件和目录
+        files = [item for item in contents if not item.get('is_dir', False)]
+        directories = [item for item in contents if item.get('is_dir', False)]
+        
+        print(f"\n当前路径 '{self.current_path}' 下的内容:")
+        print("-" * 50)
+        
+        # 显示目录
+        if directories:
+            print("目录:")
+            for i, directory in enumerate(directories, 1):
+                print(f"D{i}. {directory['name']}")
+        
+        # 显示文件
+        if files:
+            print("文件:")
+            for i, file in enumerate(files, len(directories) + 1):
+                size = file.get('size', 0)
+                size_str = self.human_readable_size(size)
+                print(f"F{i}. {file['name']} ({size_str})")
+        
+        print("-" * 50)
+        
+        if not contents:
+            print("当前目录下没有任何内容")
+            return
+        
+        try:
+            choice = input("\n请输入要重命名的项目编号 (例如 D1 或 F3，或直接输入名称): ").strip()
+            
+            selected_item = None
+            selected_type = ""  # 'file' or 'dir'
+            
+            # 检查是否是通过编号选择
+            if choice.lower().startswith('d') and choice[1:].isdigit():
+                idx = int(choice[1:]) - 1
+                if 0 <= idx < len(directories):
+                    selected_item = directories[idx]
+                    selected_type = "dir"
+            elif choice.lower().startswith('f') and choice[1:].isdigit():
+                idx = int(choice[1:]) - 1 - len(directories)
+                if 0 <= idx < len(files):
+                    selected_item = files[idx]
+                    selected_type = "file"
+            else:
+                # 检查是否是直接输入名称
+                for item in directories:
+                    if item['name'] == choice:
+                        selected_item = item
+                        selected_type = "dir"
+                        break
+                if not selected_item:
+                    for item in files:
+                        if item['name'] == choice:
+                            selected_item = item
+                            selected_type = "file"
+                            break
+            
+            if not selected_item:
+                print("未找到指定的项目")
+                return
+            
+            old_name = selected_item['name']
+            print(f"\n选择的项目: {old_name} (类型: {'目录' if selected_type == 'dir' else '文件'})")
+            
+            new_name = input(f"请输入新的名称 (当前: {old_name}): ").strip()
+            
+            if not new_name:
+                print("新名称不能为空")
+                return
+            
+            if new_name == old_name:
+                print("新名称与旧名称相同，无需重命名")
+                return
+            
+            # 构建完整路径
+            if self.current_path == "/":
+                full_path = f"/{old_name}"
+            else:
+                full_path = f"{self.current_path}/{old_name}"
+            
+            confirm = input(f"\n确认将 '{old_name}' 重命名为 '{new_name}' ? (y/N): ").strip().lower()
+            if confirm in ['y', 'yes']:
+                success = self.rename_single_item(full_path, new_name)
+                if success:
+                    print("重命名成功完成！")
+                else:
+                    print("重命名失败")
+            else:
+                print("取消重命名")
+        
+        except KeyboardInterrupt:
+            print("\n\n操作被用户中断")
+        except Exception as e:
+            print(f"发生错误: {e}")
 
 
 def main():

@@ -200,6 +200,56 @@ class InteractiveEpisodeRenamer:
             self.console.print(f"[red]✗[/red] 批量重命名请求失败: {e}")
             return False
 
+    def rename_single_item(self, path: str, new_name: str) -> bool:
+        """
+        重命名单个文件或文件夹
+        
+        :param path: 文件或文件夹的完整路径
+        :param new_name: 新名称
+        :return: 是否成功
+        """
+        if not self.token:
+            self.console.print("[red]错误: 未登录，请先调用login方法[/red]")
+            return False
+            
+        rename_url = f"{self.base_url}/api/fs/rename"
+        
+        payload = {
+            "path": path,
+            "name": new_name
+        }
+        
+        headers = {
+            "Authorization": self.token,
+            "Content-Type": "application/json"
+        }
+        
+        try:
+            with Progress(
+                SpinnerColumn(),
+                *Progress.get_default_columns(),
+                TimeElapsedColumn(),
+                console=self.console
+            ) as progress:
+                task = progress.add_task("[cyan]正在重命名单个项目...", total=None)
+                
+                response = requests.post(rename_url, json=payload, headers=headers, timeout=30)
+                response.raise_for_status()
+                
+                result = response.json()
+                progress.remove_task(task)
+                
+            if result.get("code") == 200:
+                self.console.print(f"[green]✓[/green] 重命名成功: {os.path.basename(path)} -> {new_name}")
+                return True
+            else:
+                self.console.print(f"[red]✗[/red] 重命名失败: {result.get('message')}")
+                return False
+                
+        except requests.exceptions.RequestException as e:
+            self.console.print(f"[red]✗[/red] 重命名请求失败: {e}")
+            return False
+
     def display_directories(self, path: str = "/"):
         """
         显示指定路径下的所有目录
@@ -295,12 +345,14 @@ class InteractiveEpisodeRenamer:
                 
                 options_table.add_row(f"{len(directories) + 1}.", "[green]查看当前目录文件[/green]")
                 options_table.add_row(f"{len(directories) + 2}.", "[yellow]在当前目录进行批量重命名[/yellow]")
-                options_table.add_row(f"{len(directories) + 3}.", "[red]退出[/red]")
+                options_table.add_row(f"{len(directories) + 3}.", "[blue]重命名单个文件或文件夹[/blue]")
+                options_table.add_row(f"{len(directories) + 4}.", "[red]退出[/red]")
             else:
                 # 即使没有子目录，也要显示文件查看和重命名选项
                 options_table.add_row("1.", "[green]查看当前目录文件[/green]")
                 options_table.add_row("2.", "[yellow]在当前目录进行批量重命名[/yellow]")
-                options_table.add_row("3.", "[red]退出[/red]")
+                options_table.add_row("3.", "[blue]重命名单个文件或文件夹[/blue]")
+                options_table.add_row("4.", "[red]退出[/red]")
             
             self.console.print(menu_text)
             self.console.print(options_table)
@@ -329,7 +381,9 @@ class InteractiveEpisodeRenamer:
                         self.display_files(self.current_path)
                     elif choice_num == len(directories) + 2:  # 批量重命名
                         self.interactive_batch_rename()
-                    elif choice_num == len(directories) + 3:  # 退出
+                    elif choice_num == len(directories) + 3:  # 重命名单个项目
+                        self.interactive_rename_single_item()
+                    elif choice_num == len(directories) + 4:  # 退出
                         self.console.print("[green]退出程序[/green]")
                         break
                     else:
@@ -340,7 +394,9 @@ class InteractiveEpisodeRenamer:
                         self.display_files(self.current_path)
                     elif choice_num == 2:  # 批量重命名
                         self.interactive_batch_rename()
-                    elif choice_num == 3:  # 退出
+                    elif choice_num == 3:  # 重命名单个项目
+                        self.interactive_rename_single_item()
+                    elif choice_num == 4:  # 退出
                         self.console.print("[green]退出程序[/green]")
                         break
                     else:
@@ -713,6 +769,116 @@ class InteractiveEpisodeRenamer:
             self.console.print(f"[red]正则表达式错误: {e}[/red]")
         except KeyboardInterrupt:
             self.console.print("\n\n[red]操作被用户中断[/red]")
+
+    def interactive_rename_single_item(self):
+        """
+        交互式重命名单个文件或文件夹
+        """
+        self.console.print(Panel(f"[bold blue]重命名单个文件或文件夹 - 当前路径: {self.current_path}[/bold blue]", border_style="blue"))
+        
+        # 获取当前目录的所有内容
+        contents = self.get_directory_contents(self.current_path)
+        if not contents:
+            self.console.print("[yellow]当前目录为空或无法获取内容[/yellow]")
+            return
+        
+        # 分别列出文件和目录
+        files = [item for item in contents if not item.get('is_dir', False)]
+        directories = [item for item in contents if item.get('is_dir', False)]
+        
+        self.console.print(f"\n[bold]当前路径 '{self.current_path}' 下的内容:[/bold]")
+        
+        # 创建表格显示内容
+        content_table = Table(expand=True)
+        content_table.add_column("序号", style="bold cyan", width=4)
+        content_table.add_column("类型", style="bold yellow", width=6)
+        content_table.add_column("名称", style="white")
+        content_table.add_column("大小", style="green", justify="right")
+        
+        # 添加目录项
+        for i, directory in enumerate(directories, 1):
+            content_table.add_row(f"D{i}", "目录", directory['name'], "-")
+        
+        # 添加文件项
+        for i, file in enumerate(files, len(directories) + 1):
+            size = file.get('size', 0)
+            size_str = self.human_readable_size(size)
+            content_table.add_row(f"F{i}", "文件", file['name'], size_str)
+        
+        if contents:
+            self.console.print(content_table)
+        else:
+            self.console.print("[yellow]当前目录下没有任何内容[/yellow]")
+            return
+        
+        try:
+            choice = Prompt.ask("\n请输入要重命名的项目编号 (例如 D1 或 F3，或直接输入名称)")
+            
+            selected_item = None
+            selected_type = ""  # 'file' or 'dir'
+            
+            # 检查是否是通过编号选择
+            if choice.lower().startswith('d') and choice[1:].isdigit():
+                idx = int(choice[1:]) - 1
+                if 0 <= idx < len(directories):
+                    selected_item = directories[idx]
+                    selected_type = "dir"
+            elif choice.lower().startswith('f') and choice[1:].isdigit():
+                idx = int(choice[1:]) - 1 - len(directories)
+                if 0 <= idx < len(files):
+                    selected_item = files[idx]
+                    selected_type = "file"
+            else:
+                # 检查是否是直接输入名称
+                for item in directories:
+                    if item['name'] == choice:
+                        selected_item = item
+                        selected_type = "dir"
+                        break
+                if not selected_item:
+                    for item in files:
+                        if item['name'] == choice:
+                            selected_item = item
+                            selected_type = "file"
+                            break
+            
+            if not selected_item:
+                self.console.print("[red]未找到指定的项目[/red]")
+                return
+            
+            old_name = selected_item['name']
+            item_type = "目录" if selected_type == "dir" else "文件"
+            self.console.print(f"[cyan]选择的项目: {old_name} (类型: {item_type})[/cyan]")
+            
+            new_name = Prompt.ask(f"\n请输入新的名称 (当前: {old_name})", default=old_name)
+            
+            if not new_name or new_name == old_name:
+                if new_name == old_name:
+                    self.console.print("[yellow]新名称与旧名称相同，无需重命名[/yellow]")
+                else:
+                    self.console.print("[red]新名称不能为空[/red]")
+                return
+            
+            # 构建完整路径
+            if self.current_path == "/":
+                full_path = f"/{old_name}"
+            else:
+                full_path = f"{self.current_path}/{old_name}"
+            
+            confirm = Confirm.ask(f"\n确认将 '[blue]{old_name}[/blue]' 重命名为 '[green]{new_name}[/green]' ?", default=False)
+            if confirm:
+                success = self.rename_single_item(full_path, new_name)
+                if success:
+                    self.console.print("[green]✓[/green] 重命名成功完成！")
+                else:
+                    self.console.print("[red]✗[/red] 重命名失败")
+            else:
+                self.console.print("[yellow]取消重命名[/yellow]")
+        
+        except KeyboardInterrupt:
+            self.console.print("\n\n[red]操作被用户中断[/red]")
+        except Exception as e:
+            self.console.print(f"[red]发生错误: {e}[/red]")
 
 
 def main():
