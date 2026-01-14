@@ -1,0 +1,182 @@
+#file:/Volumes/DATA/Code/Pycharm/Episode_Rename/.github/workflows/auto-tag-release.yml
+name: Auto Generate Tag and Release
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  # 检测代码变更并决定是否需要创建新版本
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should_create_tag: ${{ steps.version_check.outputs.should_create_tag }}
+      new_version: ${{ steps.version_check.outputs.new_version }}
+      commit_hash: ${{ steps.commit.outputs.hash }}
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 获取完整的git历史
+
+    - name: Get latest tag
+      id: latest_tag
+      run: |
+        if git tag --list | grep -q '^v'; then
+          LATEST_TAG=$(git describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "v0.0.0")
+        else
+          LATEST_TAG="v0.0.0"
+        fi
+        echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+        echo "Latest tag found: $LATEST_TAG"
+
+    - name: Calculate next version
+      id: version_check
+      run: |
+        LATEST_TAG="${{ steps.latest_tag.outputs.latest_tag }}"
+        VERSION_NUMBER=$(echo $LATEST_TAG | sed 's/v//' | sed 's/^v//')
+        
+        # 分割版本号
+        IFS='.' read -ra VERSION_PARTS <<< "$VERSION_NUMBER"
+        MAJOR=${VERSION_PARTS[0]:-0}
+        MINOR=${VERSION_PARTS[1]:-0}
+        PATCH=${VERSION_PARTS[2]:-0}
+        
+        # 检查自上次标签以来是否有变更
+        if git rev-parse HEAD^{tree} 2>/dev/null && git rev-parse $LATEST_TAG^{tree} 2>/dev/null; then
+          CHANGES_COUNT=$(git diff --name-only $LATEST_TAG..HEAD | wc -l)
+        else
+          CHANGES_COUNT=1  # 如果没有标签，则认为有变更
+        fi
+        
+        if [ $CHANGES_COUNT -gt 0 ]; then
+          # 增加补丁版本号
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+          NEW_TAG="v$NEW_VERSION"
+          
+          echo "should_create_tag=true" >> $GITHUB_OUTPUT
+          echo "new_version=$NEW_TAG" >> $GITHUB_OUTPUT
+          echo "New version calculated: $NEW_TAG"
+        else
+          echo "should_create_tag=false" >> $GITHUB_OUTPUT
+          echo "No changes since last tag, no new version needed"
+        fi
+
+    - name: Get commit hash
+      id: commit
+      run: |
+        COMMIT_HASH=$(git rev-parse --short HEAD)
+        echo "hash=$COMMIT_HASH" >> $GITHUB_OUTPUT
+
+  # 自动创建新标签
+  create-tag:
+    needs: check-changes
+    if: needs.check-changes.outputs.should_create_tag == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+
+    - name: Configure git
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+
+    - name: Create and push new tag
+      run: |
+        NEW_TAG="${{ needs.check-changes.outputs.new_version }}"
+        echo "Creating tag: $NEW_TAG"
+        git tag -a $NEW_TAG -m "Auto-generated release $NEW_TAG"
+        git push origin $NEW_TAG
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 基于新标签构建可执行文件
+  build-executables:
+    needs: create-tag
+    if: needs.check-changes.outputs.should_create_tag == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: [3.12]
+        script: [interactive_episode_renamer, interactive_episode_renamer_with_rich]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller requests
+        if [ "${{ matrix.script }}" = "interactive_episode_renamer_with_rich" ]; then
+          pip install rich
+        fi
+      shell: bash
+
+    - name: Build ${{ matrix.script }} (Linux/Mac)
+      if: matrix.os != 'windows-latest'
+      run: |
+        pyinstaller --onefile --name ${{ matrix.script }}-${{ matrix.os }}-${{ matrix.python-version }} ${{ matrix.script }}.py
+      shell: bash
+
+    - name: Build ${{ matrix.script }} (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        pyinstaller --onefile --name ${{ matrix.script }}-${{ matrix.os }}-${{ matrix.python-version }} ${{ matrix.script }}.py
+      shell: pwsh
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.script }}-${{ matrix.os }}-${{ matrix.python-version }}
+        path: dist/
+
+  # 创建 GitHub Release
+  create-release:
+    needs: [check-changes, create-tag, build-executables]
+    if: needs.check-changes.outputs.should_create_tag == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./releases
+
+    - name: Prepare release assets
+      run: |
+        mkdir -p release_assets
+        find releases -type f -exec cp {} release_assets/ \;
+        ls -la release_assets/
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ needs.check-changes.outputs.new_version }}
+        name: Release ${{ needs.check-changes.outputs.new_version }}
+        body: |
+          Auto-generated release
+          - Commit: ${{ needs.check-changes.outputs.commit_hash }}
+          - Built on: $(date)
+        files: release_assets/*
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
