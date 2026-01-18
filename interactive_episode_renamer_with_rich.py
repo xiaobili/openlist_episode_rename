@@ -4,6 +4,7 @@ import re
 from typing import Dict, List, Optional
 import os
 import pickle
+import configparser
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -30,6 +31,111 @@ class InteractiveEpisodeRenamer:
         self.current_path = "/"
         self.console = Console()
         self.token_file_path = os.path.join(os.environ.get("EPISODE_PATH", "/tmp"), "token")
+        self.config_file_path = os.path.join(os.environ.get("EPISODE_PATH"), "episode_renamer.conf")
+
+    def save_config(self, base_url: str):
+        """
+        保存配置到本地文件
+        """
+        try:
+            config = configparser.ConfigParser()
+            
+            # 确保配置目录存在
+            config_dir = os.path.dirname(self.config_file_path)
+            os.makedirs(config_dir, exist_ok=True)
+            
+            # 设置配置值
+            config['DEFAULT'] = {
+                'base_url': base_url,
+            }
+            
+            with open(self.config_file_path, 'w', encoding='utf-8') as configfile:
+                config.write(configfile)
+            
+            self.console.print(f"[green]✓[/green] 配置已保存到 {self.config_file_path}")
+        except Exception as e:
+            self.console.print(f"[red]✗[/red] 保存配置失败: {e}")
+
+    def load_config(self) -> dict:
+        """
+        从本地文件加载配置
+        """
+        try:
+            if os.path.exists(self.config_file_path):
+                config = configparser.ConfigParser()
+                config.read(self.config_file_path, encoding='utf-8')
+                
+                return {
+                    'base_url': config.get('DEFAULT', 'base_url', fallback='http://192.168.1.1:5244')
+                }
+            else:
+                return {
+                    'base_url': 'http://192.168.1.1:5244'
+                }
+        except Exception as e:
+            self.console.print(f"[red]✗[/red] 加载配置失败: {e}")
+            return {
+                'base_url': 'http://192.168.1.1:5244'
+            }
+
+    def validate_current_user(self) -> bool:
+        """
+        验证当前令牌是否属于当前用户
+        """
+        if not self.token:
+            return False
+            
+        # 尝试获取用户信息来验证令牌的有效性
+        try:
+            headers = {
+                "Authorization": self.token,
+                "Content-Type": "application/json"
+            }
+            
+            # 尝试获取用户信息
+            user_info_url = f"{self.base_url}/api/me"
+            response = requests.get(user_info_url, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            result = response.json()
+            # 如果请求成功，则认为令牌有效
+            if "code" in result and result["code"] == 200 and "data" in result:
+                # 检查返回的用户名是否与当前输入的用户名一致
+                if "username" in result["data"]:
+                    returned_username = result["data"]["username"]
+                    return returned_username == self.username
+                # 如果返回的数据结构不同，可能包含用户ID或其他标识符
+                elif "nick" in result["data"]:
+                    returned_nick = result["data"]["nick"]
+                    return returned_nick == self.username
+                elif "name" in result["data"]:
+                    returned_name = result["data"]["name"]
+                    return returned_name == self.username
+                # 如果没有用户名字段，至少验证令牌是有效的
+                else:
+                    return True
+            return False
+        except requests.exceptions.RequestException:
+            # 如果 /api/me 不可用，尝试使用文件列表API作为备用验证方式
+            try:
+                headers = {
+                    "Authorization": self.token,
+                    "Content-Type": "application/json"
+                }
+                
+                # 尝试访问根目录
+                list_url = f"{self.base_url}/api/fs/list"
+                payload = {"path": "/"}
+                
+                response = requests.post(list_url, json=payload, headers=headers, timeout=30)
+                response.raise_for_status()
+                
+                result = response.json()
+                # 如果请求成功(code为200)，则认为令牌有效
+                # 但无法验证用户名，所以这里只验证令牌有效性
+                return result.get("code") == 200
+            except requests.exceptions.RequestException:
+                return False
 
     def save_token(self):
         """
@@ -921,8 +1027,18 @@ def main():
     console = Console()
     console.print(Panel("[bold blue]OpenList 交互式剧集重命名工具[/bold blue]", border_style="blue"))
     
+    # 创建重命名实例
+    renamer = InteractiveEpisodeRenamer("", "", "")
+    
+    # 从配置文件加载默认地址
+    config = renamer.load_config()
+    default_base_url = config['base_url']
+    
     # 获取用户输入
-    base_url = Prompt.ask("请输入OpenList服务地址", default="http://192.168.1.1:5244")
+    base_url = Prompt.ask("请输入OpenList服务地址", default=default_base_url)
+    
+    # 保存新的地址到配置文件
+    renamer.save_config(base_url)
     
     username = Prompt.ask("请输入用户名")
     if not username:
@@ -934,12 +1050,12 @@ def main():
     
     # 尝试从本地文件加载令牌
     if renamer.load_token():
-        # 验证令牌是否有效
+        # 验证令牌是否有效以及是否属于当前用户
         console.print("[cyan]正在验证本地令牌...[/cyan]")
-        if renamer.get_directory_contents("/") is not None:
+        if renamer.validate_current_user():
             console.print("[green]✓[/green] 令牌验证成功，跳过登录步骤")
         else:
-            console.print("[red]✗[/red] 令牌已过期或无效，需要重新登录")
+            console.print("[red]✗[/red] 令牌与当前用户不匹配或已过期，需要重新登录")
             password = getpass.getpass("请输入密码进行重新登录: ")
             renamer = InteractiveEpisodeRenamer(base_url, username, password)
             if not renamer.login():

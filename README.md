@@ -25,6 +25,7 @@
 ### 新增功能
 - **Token 持久化** - 登录后将 JWT 令牌保存到本地文件 `$EPISODE_PATH/token`，实现免登录访问
 - **自动登录恢复** - 启动时自动检测并使用有效的本地令牌，无需重复输入凭据
+- **配置文件管理** - 将 OpenList 服务地址等配置信息保存到用户主目录下的 `.episoderenamer_config.ini` 文件中
 
 ## 📋 系统要求
 
@@ -73,6 +74,11 @@ python interactive_episode_renamer.py
 - **令牌路径**: 系统环境变量 `$EPISODE_PATH`，令牌文件名为 `token`
 - **默认路径**: 如果未设置 `$EPISODE_PATH`，令牌将保存到 `/tmp/token`
 
+### 配置文件设置
+- **配置文件路径**: 用户主目录下的 `.episoderenamer_config.ini`
+- **默认地址**: 配置文件中保存的默认 OpenList 服务地址
+- **自动加载**: 启动时自动从配置文件加载默认地址
+
 ### 支持的视频格式
 `.mp4`, `.mkv`, `.avi`, `.mov`, `.wmv`, `.flv`, `.webm`, `.m4v`, `.mpg`, `.mpeg`, `.ts`, `.m2ts`, `.vob`, `.iso`
 
@@ -83,19 +89,24 @@ python interactive_episode_renamer.py
 - 如果令牌存在且有效，将跳过登录步骤
 - 如果令牌不存在或已过期，需要输入 OpenList 服务地址、用户名和密码
 
-### 2. 目录导航
+### 2. 配置管理
+- 首次运行时，需要输入 OpenList 服务地址
+- 地址将自动保存到配置文件中
+- 后续运行时，默认地址将从配置文件加载
+
+### 3. 目录导航
 - 选择数字进入子目录
 - 0 键返回上级目录
 - 查看当前目录的文件和子目录
 
-### 3. 重命名操作
+### 4. 重命名操作
 - 选择视频文件进行批量重命名
 - 选择重命名模式：
   - **智能重命名**: 自动解析剧集信息
   - **手动重命名**: 逐一指定新名称
   - **统一样式**: 统一格式，递增集数
 
-### 4. 命名模式示例
+### 5. 命名模式示例
 - `{title}.S{season}E{episode:02d}` → `权力的游戏.S01E01.mp4`
 - `Season_{season}_Episode_{episode:02d}_{title}` → `Season_01_Episode_01_权力的游戏.mp4`
 
@@ -106,6 +117,7 @@ python interactive_episode_renamer.py
 - **API 集成** - 与 OpenList API 通信
 - **文件系统操作** - 目录浏览和文件重命名
 - **Token 管理** - 本地令牌持久化和自动加载
+- **配置管理** - 本地配置文件读写和管理
 
 ### API 接口
 - `/api/auth/login` - 用户认证
@@ -128,6 +140,7 @@ python interactive_episode_renamer.py
 3. 用户名和密码是否正确
 4. API 端点是否可用
 5. `$EPISODE_PATH` 环境变量是否正确设置（用于令牌持久化）
+6. 配置文件是否存在且格式正确
 
 ---
 
