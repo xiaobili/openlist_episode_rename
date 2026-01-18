@@ -3,6 +3,7 @@ import json
 import re
 from typing import Dict, List, Optional
 import os
+import pickle
 
 
 class InteractiveEpisodeRenamer:
@@ -19,6 +20,37 @@ class InteractiveEpisodeRenamer:
         self.password = password
         self.token = None
         self.current_path = "/"
+        self.token_file_path = os.path.join(os.environ.get("EPISODE_PATH", "/tmp"), "token")
+
+    def save_token(self):
+        """
+        将token保存到本地文件
+        """
+        try:
+            # 确保目录存在
+            token_dir = os.path.dirname(self.token_file_path)
+            os.makedirs(token_dir, exist_ok=True)
+            
+            with open(self.token_file_path, 'wb') as f:
+                pickle.dump(self.token, f)
+            print(f"令牌已保存到 {self.token_file_path}")
+        except Exception as e:
+            print(f"保存令牌失败: {e}")
+
+    def load_token(self) -> bool:
+        """
+        从本地文件加载token
+        """
+        try:
+            if os.path.exists(self.token_file_path):
+                with open(self.token_file_path, 'rb') as f:
+                    self.token = pickle.load(f)
+                print("从本地文件加载令牌成功")
+                return True
+            return False
+        except Exception as e:
+            print(f"加载令牌失败: {e}")
+            return False
 
     def login(self) -> bool:
         """
@@ -792,10 +824,24 @@ def main():
     # 创建重命名实例
     renamer = InteractiveEpisodeRenamer(base_url, username, password)
     
-    # 登录
-    if not renamer.login():
-        print("无法登录到OpenList服务")
-        return
+    # 尝试从本地文件加载令牌
+    if renamer.load_token():
+        # 验证令牌是否有效
+        print("正在验证本地令牌...")
+        if renamer.get_directory_contents("/") is not None:
+            print("令牌验证成功，跳过登录步骤")
+        else:
+            print("令牌已过期或无效，需要重新登录")
+            password = getpass.getpass("请输入密码进行重新登录: ")
+            renamer = InteractiveEpisodeRenamer(base_url, username, password)
+            if not renamer.login():
+                print("无法登录到OpenList服务")
+                return
+    else:
+        # 登录
+        if not renamer.login():
+            print("无法登录到OpenList服务")
+            return
     
     # 开始交互式导航
     renamer.interactive_navigate()
